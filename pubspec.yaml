@@ -1,7 +1,7 @@
 name: yaosulee_mobile
 description: YaosuLee WebView App with video splash and VIP routing
 publish_to: "none"
-version: 1.1.0+3
+version: 1.0.7+4
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -13,6 +13,7 @@ dependencies:
   webview_flutter_android: ^3.16.0
   webview_flutter_wkwebview: ^3.12.0
   video_player: ^2.9.2
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

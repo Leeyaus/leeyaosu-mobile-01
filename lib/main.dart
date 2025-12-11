@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+const kBrandPrimaryGreen = Color(0xFF004D40);
+const kBrandAccentGold = Color(0xFFFFC107);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +15,7 @@ void main() {
   if (Platform.isIOS) {
     WebViewPlatform.instance = WebKitWebViewPlatform();
   }
+
   runApp(const YaosuLeeApp());
 }
 
@@ -22,14 +28,105 @@ class YaosuLeeApp extends StatelessWidget {
       title: '李藥師線上整復教學',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2A86FF)),
+        colorScheme: ColorScheme.fromSeed(seedColor: kBrandPrimaryGreen),
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: kBrandPrimaryGreen,
+          foregroundColor: Colors.white,
+          centerTitle: false,
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: kBrandAccentGold,
+          ),
+        ),
+        iconTheme: const IconThemeData(
+          color: kBrandAccentGold,
+        ),
       ),
-      home: const AppShell(),
+      // 先進入啟動影片畫面
+      home: const SplashScreen(),
     );
   }
 }
 
+/// 啟動影片畫面
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  late VideoPlayerController _videoController;
+  bool _navigated = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // TODO: 這裡的路徑請依你實際放 mp4 的路徑調整
+    // 例如：assets/splash/intro.mp4
+    _videoController =
+        VideoPlayerController.asset('assets/splash/intro.mp4')
+          ..initialize().then((_) {
+            if (!mounted) return;
+            setState(() {});
+            _videoController.play();
+          });
+
+    // 監聽影片播放結束
+    _videoController.addListener(() {
+      if (!_videoController.value.isInitialized) return;
+      final finished =
+          _videoController.value.position >= _videoController.value.duration;
+      if (finished && !_navigated && mounted) {
+        _goNext();
+      }
+    });
+
+    // 保險機制：超過 10 秒就強制進入主畫面（避免影片讀取失敗卡死）
+    Future.delayed(const Duration(seconds: 10), () {
+      if (!_navigated && mounted) {
+        _goNext();
+      }
+    });
+  }
+
+  void _goNext() {
+    _navigated = true;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const AppShell()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _videoController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _goNext, // 點一下也可以略過影片
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: _videoController.value.isInitialized
+              ? AspectRatio(
+                  aspectRatio: _videoController.value.aspectRatio,
+                  child: VideoPlayer(_videoController),
+                )
+              : const CircularProgressIndicator(),
+        ),
+      ),
+    );
+  }
+}
+
+/// 主要 WebView 殼
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -38,15 +135,15 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  static const String kLoginUrl   = 'https://yaosulee.com/login-2/';
+  // 網址常數
+  static const String kLoginUrl = 'https://yaosulee.com/login-2/';
   static const String kCoursesUrl = 'https://yaosulee.com/lpcourses/';
-  static const String kShopUrl    = 'https://yaosulee.com/shop/';
 
   late final WebViewController _controller;
   bool _isLoading = true;
   String _currentTitle = '會員登入';
 
-  // === 新增：頁面清潔模式 ===
+  /// 清爽畫面：隱藏頁首 / 頁尾等
   Future<void> _applyCleanUI() async {
     const js = r"""
       (function() {
@@ -54,33 +151,30 @@ class _AppShellState extends State<AppShell> {
           el.style.display = 'none';
         });
 
-        // 常見 WordPress 主題結構
-        hide('#wpadminbar, header, .site-header, .elementor-location-header, .elementor-sticky--effects, .ast-header-break-point, .ast-mobile-header-wrap, .o-header, .oceanwp-mobile-menu-icon');
+        hide('#wpadminbar, header, .site-header, .elementor-location-header, .ast-header-break-point, .ast-primary-header-bar, .ast-mobile-header-wrap, .o-header, .oceanwp-mobile-menu-icon');
         hide('footer, .site-footer, .elementor-location-footer');
-
-        // 移除麵包屑與公告列
         hide('.breadcrumbs, .breadcrumb, .page-header, .top-bar, .site-breadcrumbs, .notice, .announcement');
 
-        // 清除頂部空白
         document.documentElement.style.setProperty('--wp-admin--admin-bar--height','0px');
         document.body.style.marginTop = '0';
         document.body.style.paddingTop = '0';
 
-        // 調整主要容器
         const relax = (sel) => document.querySelectorAll(sel).forEach(el => {
           el.style.marginTop = '0';
           el.style.paddingTop = '0';
         });
-        relax('#content, .site-content, .entry-content, .elementor-location-single, .container, .content-area');
+        relax('main, .site-main, .content-area, .elementor-section');
 
-        // 監聽 DOM 變化確保持隱藏
-        if (!window.__yl_clean_observer__) {
+        if (!window.__yaosuLeeObserverAdded) {
+          window.__yaosuLeeObserverAdded = true;
           try {
-            window.__yl_clean_observer__ = new MutationObserver(() => {
-              hide('#wpadminbar, header, .site-header, .elementor-location-header, .elementor-sticky--effects, .ast-header-break-point, .ast-mobile-header-wrap, .o-header, .oceanwp-mobile-menu-icon');
+            const observer = new MutationObserver(() => {
+              hide('#wpadminbar, header, .site-header, .elementor-location-header, .ast-header-break-point, .ast-primary-header-bar, .ast-mobile-header-wrap, .o-header, .oceanwp-mobile-menu-icon');
               hide('footer, .site-footer, .elementor-location-footer');
+              hide('.breadcrumbs, .breadcrumb, .page-header, .top-bar, .site-breadcrumbs, .notice, .announcement');
+              relax('main, .site-main, .content-area, .elementor-section');
             });
-            window.__yl_clean_observer__.observe(document.body, { childList: true, subtree: true });
+            observer.observe(document.body, { childList: true, subtree: true });
           } catch(e) {}
         }
       })();
@@ -91,7 +185,109 @@ class _AppShellState extends State<AppShell> {
     } catch (_) {}
   }
 
-  // === 加上防快取 ===
+  /// 導向外部 APP / 瀏覽器（官方網站、IG、Line、WhatsApp、電話）
+  Future<void> _launchExternalUrl(String url) async {
+    if (await canLaunch(url)) {
+      await launch(url);
+    }
+  }
+
+  /// 顯示「聯繫我們」底部彈窗
+  void _showContactSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const ListTile(
+                  title: Text(
+                    '聯繫我們',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: kBrandPrimaryGreen,
+                    ),
+                  ),
+                  subtitle: Text('骨寶有限公司'),
+                ),
+                const Divider(),
+
+                // 官方網站
+                ListTile(
+                  leading: const Icon(Icons.public),
+                  title: const Text('官方網站'),
+                  subtitle: const Text('yaosulee.com'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _launchExternalUrl('https://yaosulee.com/');
+                  },
+                ),
+
+                // Instagram
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_outlined),
+                  title: const Text('Instagram'),
+                  subtitle: const Text('@yaosu.lee'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _launchExternalUrl(
+                      'https://www.instagram.com/yaosu.lee/?hl=zh-tw',
+                    );
+                  },
+                ),
+
+                // Line 官方帳號
+                ListTile(
+                  leading: const Icon(Icons.chat_bubble_outline),
+                  title: const Text('Line 官方帳號'),
+                  subtitle: const Text('@901pqtpo'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _launchExternalUrl(
+                      'https://line.me/R/ti/p/@901pqtpo',
+                    );
+                  },
+                ),
+
+                // WhatsApp
+                ListTile(
+                  leading: const Icon(Icons.chat),
+                  title: const Text('WhatsApp 聯絡'),
+                  subtitle: const Text('+886 921 821 212'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _launchExternalUrl('https://wa.me/886921821212');
+                  },
+                ),
+
+                // 一鍵撥號
+                ListTile(
+                  leading: const Icon(Icons.call),
+                  title: const Text('一鍵撥號'),
+                  subtitle: const Text('+886 921 821 212'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _launchExternalUrl('tel:+886921821212');
+                  },
+                ),
+
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 加上時間戳，避免快取
   Uri _freshUri(String base) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final uri = Uri.parse(base);
@@ -111,12 +307,7 @@ class _AppShellState extends State<AppShell> {
   Future<void> _handleWebError(WebResourceError error) async {
     try {
       final cur = await _controller.currentUrl();
-      if (cur != null) {
-        final u = Uri.parse(cur);
-        final qp = Map<String, String>.from(u.queryParameters);
-        qp['ts'] = '${DateTime.now().millisecondsSinceEpoch}';
-        await _controller.loadRequest(u.replace(queryParameters: qp));
-      }
+      debugPrint('Web error on $cur: ${error.errorCode} ${error.description}');
     } catch (_) {}
   }
 
@@ -128,7 +319,8 @@ class _AppShellState extends State<AppShell> {
         ? const PlatformWebViewControllerCreationParams()
         : const PlatformWebViewControllerCreationParams();
 
-    final controller = WebViewController.fromPlatformCreationParams(params)
+    final controller = WebViewController.fromPlatformCreationParams(params);
+    controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
@@ -136,7 +328,7 @@ class _AppShellState extends State<AppShell> {
           onPageStarted: (_) => setState(() => _isLoading = true),
           onPageFinished: (_) async {
             setState(() => _isLoading = false);
-            await _applyCleanUI(); // ← 自動清除頁首與頁尾
+            await _applyCleanUI();
           },
           onWebResourceError: _handleWebError,
           onNavigationRequest: (req) => NavigationDecision.navigate,
@@ -163,16 +355,21 @@ class _AppShellState extends State<AppShell> {
           title: Text(_currentTitle),
           centerTitle: false,
           actions: [
+            // 前往線上課程
             TextButton.icon(
               onPressed: () => _goTo(kCoursesUrl, title: '線上課程'),
               icon: const Icon(Icons.school_outlined),
               label: const Text('前往線上課程'),
             ),
+
+            // 聯繫我們（官方網站 / IG / Line / WhatsApp / 電話）
             TextButton.icon(
-              onPressed: () => _goTo(kShopUrl, title: '商城'),
-              icon: const Icon(Icons.shopping_cart_outlined),
-              label: const Text('商城'),
+              onPressed: _showContactSheet,
+              icon: const Icon(Icons.contact_phone_outlined),
+              label: const Text('聯繫我們'),
             ),
+
+            // 首頁：回登入頁
             IconButton(
               tooltip: '回會員登入',
               onPressed: () => _goTo(kLoginUrl, title: '會員登入'),

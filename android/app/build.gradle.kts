@@ -34,8 +34,8 @@ android {
         applicationId = "com.yaosulee.mobile"
         minSdk = flutter.minSdkVersion
         targetSdk = 35
-        versionCode = 6          // 上架每次要 +1
-        versionName = "1.0.6"    // 自訂版本字串
+        versionCode = 1          // 上架每次要 +1
+        versionName = "1.0.1"    // 自訂版本字串
     }
 
     // --- 簽章設定（讀取 key.properties） ---

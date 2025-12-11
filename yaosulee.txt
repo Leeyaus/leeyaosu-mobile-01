@@ -3,3 +3,24 @@ yaosulee.csr   ← 這個要上傳給 Apple Developer
 
 Apple 回傳的 .cer 憑證檔案 
 distribution.cer
+
+Issuer ID?=
+81948aa5-7d09-4aba-a56b-64465ba44191
+金鑰
+3A7FB46U59
+檔案：AuthKey_3A7FB46U59.p8
+
+openssl x509 -in distribution.cer -inform DER -out distribution.pem -outform PEM
+openssl pkcs12 -export yaosulee.key -in distribution.pem -out distribution.p12
+openssl pkcs12 -export yaosulee.key -in distribution.pem -out ios_distribution.p12
+
+git config --global user.email "a0921821212@gmail.com"
+git config --global user.name "Leeyaus"
+
+git remote add origin https://github.com/Leeyaus/leeyaosu-mobile-01.git
+git push -u origin main
+
+
+https://github.com/Leeyaus/leeyaosu-mobile-01
+
+git remote add origin https://github.com/Leeyaus/leeyaosu-mobile-01.git
